@@ -1,282 +1,349 @@
 /* =============================================
-   NBA 实时数据 - 主应用逻辑
+   NBA 篮球视界 - 主应用逻辑 (ESPN API)
    ============================================= */
 
 // ===== 配置 =====
 const API = {
-    base: 'https://balldontlie.io/api/v1',
-    season: 2025,  // 2025-26 season
+    scoreboard: 'https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard',
+    news: 'https://site.api.espn.com/apis/site/v2/sports/basketball/nba/news',
+    stats: 'https://site.api.espn.com/apis/common/v3/sports/basketball/nba/statistics/byathlete',
 };
 
-// ===== 球队中文名映射 =====
+// ===== 球队中文名 =====
 const TEAM_CN = {
-    1: '老鹰', 2: '凯尔特人', 3: '篮网', 4: '黄蜂', 5: '公牛',
-    6: '骑士', 7: '独行侠', 8: '掘金', 9: '活塞', 10: '勇士',
-    11: '火箭', 12: '步行者', 13: '快船', 14: '湖人', 15: '灰熊',
-    16: '热火', 17: '雄鹿', 18: '森林狼', 19: '鹈鹕', 20: '尼克斯',
-    21: '雷霆', 22: '魔术', 23: '76人', 24: '太阳', 25: '开拓者',
-    26: '国王', 27: '马刺', 28: '猛龙', 29: '爵士', 30: '奇才',
+    'ATL': '老鹰', 'BOS': '凯尔特人', 'BKN': '篮网', 'CHA': '黄蜂', 'CHI': '公牛',
+    'CLE': '骑士', 'DAL': '独行侠', 'DEN': '掘金', 'DET': '活塞', 'GSW': '勇士',
+    'HOU': '火箭', 'IND': '步行者', 'LAC': '快船', 'LAL': '湖人', 'MEM': '灰熊',
+    'MIA': '热火', 'MIL': '雄鹿', 'MIN': '森林狼', 'NOP': '鹈鹕', 'NYK': '尼克斯',
+    'OKC': '雷霆', 'ORL': '魔术', 'PHI': '76人', 'PHX': '太阳', 'POR': '开拓者',
+    'SAC': '国王', 'SAS': '马刺', 'TOR': '猛龙', 'UTA': '爵士', 'WAS': '奇才',
+};
+
+// ESPN缩写 → 标准3字母缩写映射
+const ABBR_MAP = {
+    'NY': 'NYK', 'SA': 'SAS', 'PHO': 'PHX', 'GS': 'GSW', 'NO': 'NOP',
+    'UTAH': 'UTA', 'WSH': 'WAS',
+};
+
+// 球队颜色
+const TEAM_COLORS = {
+    'ATL': '#E03A3E', 'BOS': '#007A33', 'BKN': '#000000', 'CHA': '#1D1160',
+    'CHI': '#CE1141', 'CLE': '#860038', 'DAL': '#00538C', 'DEN': '#0E2240',
+    'DET': '#1D42BA', 'GSW': '#1D428A', 'HOU': '#CE1141', 'IND': '#002D62',
+    'LAC': '#C8102E', 'LAL': '#552583', 'MEM': '#5D76A9', 'MIA': '#98002E',
+    'MIL': '#00471B', 'MIN': '#0C2340', 'NOP': '#0C2340', 'NYK': '#F58426',
+    'OKC': '#007AC1', 'ORL': '#0077C0', 'PHI': '#006BB6', 'PHX': '#1D1160',
+    'POR': '#E03A3E', 'SAC': '#5A2D81', 'SAS': '#C4CED4', 'TOR': '#CE1141',
+    'UTA': '#002B5C', 'WAS': '#002B5C',
 };
 
 // ===== 状态 =====
 let state = {
     teams: [],
     currentDate: '',
-    selectedPlayerId: null,
+    standingsCache: null,
+    selectedLB: 'pts',
     refreshTimer: null,
 };
 
-// ===== DOM 引用 =====
-const $ = (sel, ctx = document) => ctx.querySelector(sel);
-const $$ = (sel, ctx = document) => [...ctx.querySelectorAll(sel)];
-
+// ===== DOM =====
+const $ = (s, c = document) => c.querySelector(s);
+const $$ = (s, c = document) => [...c.querySelectorAll(s)];
 const el = {};
+
 function cacheDOM() {
-    el.tabNav = $('#tabNav');
-    el.tabs = $$('.tab-btn');
-    el.tabContents = {
-        games: $('#tab-games'),
-        players: $('#tab-players'),
-        standings: $('#tab-standings'),
-    };
-    el.gamesContainer = $('#gamesContainer');
-    el.displayDate = $('#displayDate');
     el.headerDate = $('#headerDate');
+    el.liveIndicator = $('#liveIndicator');
+    el.tabBtns = $$('.tab-btn');
+    el.newsScroll = $('#newsScroll');
+    el.displayDate = $('#displayDate');
     el.prevDateBtn = $('#prevDateBtn');
     el.nextDateBtn = $('#nextDateBtn');
     el.todayBtn = $('#todayBtn');
-    el.liveBadge = $('#liveBadge');
-    el.playerSearch = $('#playerSearchInput');
-    el.searchBtn = $('#searchBtn');
-    el.playerResults = $('#playerResults');
-    el.playerStatsContainer = $('#playerStatsContainer');
+    el.gamesContainer = $('#gamesContainer');
+    el.lbTabs = $$('.lb-tab');
+    el.lbContainer = $('#leaderboardContainer');
     el.standingsContainer = $('#standingsContainer');
-    el.hotTags = $$('.hot-tag');
 }
 
 // ===== 工具函数 =====
-function getChinaDate(offset = 0) {
-    const now = new Date();
-    const utc = now.getTime() + now.getTimezoneOffset() * 60000;
-    const china = new Date(utc + 8 * 3600000);
-    china.setDate(china.getDate() + offset);
-    return china;
-}
-
-function formatDateKey(date) {
-    const y = date.getFullYear();
-    const m = String(date.getMonth() + 1).padStart(2, '0');
-    const d = String(date.getDate()).padStart(2, '0');
-    return `${y}-${m}-${d}`;
-}
-
-function formatDisplayDate(date) {
-    const weekdays = ['日', '一', '二', '三', '四', '五', '六'];
-    const m = date.getMonth() + 1;
-    const d = date.getDate();
-    const w = weekdays[date.getDay()];
-    return `${m}月${d}日 星期${w}`;
-}
-
-function formatHeaderDate(date) {
-    const y = date.getFullYear();
-    const m = String(date.getMonth() + 1).padStart(2, '0');
-    const d = String(date.getDate()).padStart(2, '0');
-    const weekdays = ['日', '一', '二', '三', '四', '五', '六'];
-    const w = weekdays[date.getDay()];
-    return `${y}年${m}月${d}日 周${w}`;
-}
-
-function getTeamName(teamId) {
-    const team = state.teams.find(t => t.id === teamId);
-    return team ? team.full_name : `Team #${teamId}`;
-}
-
-function getTeamCn(teamId) {
-    return TEAM_CN[teamId] || '';
-}
-
-function getTeamAbbr(teamId) {
-    const team = state.teams.find(t => t.id === teamId);
-    return team ? team.abbreviation : '';
-}
-
-function getTeamLogo(id) {
-    const abbr = getTeamAbbr(id);
-    if (!abbr) return '';
-    return `https://a.espncdn.com/combiner/i?img=/i/teamlogos/nba/500/${abbr}.png&h=40&w=40`;
-}
-
-function formatTimeUTC(isoStr) {
-    if (!isoStr) return '';
-    const d = new Date(isoStr);
+function getUSDate(offset = 0) {
+    // 使用美东时间(UTC-4)，ESPN API 以此为准
+    const d = new Date();
     const utc = d.getTime() + d.getTimezoneOffset() * 60000;
-    const china = new Date(utc + 8 * 3600000);
-    const h = String(china.getHours()).padStart(2, '0');
-    const m = String(china.getMinutes()).padStart(2, '0');
-    return `${h}:${m}`;
+    const us = new Date(utc - 4 * 3600000);
+    us.setDate(us.getDate() + offset);
+    return us;
 }
 
-function debounce(fn, ms = 300) {
-    let timer;
-    return (...args) => {
-        clearTimeout(timer);
-        timer = setTimeout(() => fn(...args), ms);
-    };
+function fmtDateKey(d) {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${y}${m}${dd}`;
+}
+
+function fmtDateDisplay(d) {
+    const wk = ['日','一','二','三','四','五','六'];
+    return `${d.getMonth()+1}月${d.getDate()}日 周${wk[d.getDay()]}`;
+}
+
+function fmtHeaderDate(d) {
+    const wk = ['日','一','二','三','四','五','六'];
+    return `${d.getFullYear()}年${d.getMonth()+1}月${d.getDate()}日 周${wk[d.getDay()]}`;
+}
+
+function resolveAbbr(abbr) { return ABBR_MAP[abbr] || abbr; }
+function getCn(abbr) { return TEAM_CN[resolveAbbr(abbr)] || abbr; }
+function getColor(abbr) { return TEAM_COLORS[resolveAbbr(abbr)] || '#333'; }
+
+function getLogo(abbr) {
+    return `https://a.espncdn.com/combiner/i?img=/i/teamlogos/nba/500/${resolveAbbr(abbr)}.png&h=48&w=48`;
+}
+
+function getLogoSm(abbr) {
+    return `https://a.espncdn.com/combiner/i?img=/i/teamlogos/nba/500/${resolveAbbr(abbr)}.png&h=24&w=24`;
+}
+
+function timeAgo(iso) {
+    const t = new Date(iso).getTime();
+    const n = Date.now();
+    const diff = n - t;
+    const min = Math.floor(diff / 60000);
+    if (min < 1) return '刚刚';
+    if (min < 60) return `${min}分钟前`;
+    const h = Math.floor(min / 60);
+    if (h < 24) return `${h}小时前`;
+    return `${Math.floor(h/24)}天前`;
 }
 
 // ===== API 调用 =====
-async function fetchAPI(endpoint, params = {}) {
-    const qs = Object.entries(params)
-        .map(([k, v]) => {
-            if (Array.isArray(v)) return v.map(x => `${k}[]=${encodeURIComponent(x)}`).join('&');
-            return `${k}=${encodeURIComponent(v)}`;
-        })
-        .join('&');
-    const url = `${API.base}${endpoint}${qs ? '?' + qs : ''}`;
-
-    const res = await fetch(url, {
-        headers: { 'Accept': 'application/json' },
-    });
-
-    if (!res.ok) {
-        throw new Error(`API error: ${res.status} ${res.statusText}`);
-    }
-    return res.json();
+async function fetchJson(url) {
+    const r = await fetch(url, { headers: { 'Accept': 'application/json' } });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    return r.json();
 }
 
-// ===== 加载球队数据 =====
-async function loadTeams() {
-    try {
-        const data = await fetchAPI('/teams');
-        state.teams = data.data;
-    } catch (err) {
-        console.error('Failed to load teams:', err);
-    }
+async function fetchScoreboard(dateKey) {
+    const url = dateKey
+        ? `${API.scoreboard}?dates=${dateKey}`
+        : API.scoreboard;
+    return fetchJson(url);
 }
 
 // ===== 标签切换 =====
 function setupTabs() {
-    el.tabs.forEach(btn => {
+    el.tabBtns.forEach(btn => {
         btn.addEventListener('click', () => {
             const tab = btn.dataset.tab;
-            switchTab(tab);
+            $$('.tab-btn').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
+            $$('.tab-content').forEach(t => t.classList.toggle('active', t.id === `tab-${tab}`));
+            if (tab === 'games') loadGames();
+            if (tab === 'players') loadLeaders(state.selectedLB);
+            if (tab === 'standings') loadStandings();
         });
     });
 }
 
-function switchTab(tab) {
-    el.tabs.forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
-    Object.entries(el.tabContents).forEach(([key, section]) => {
-        section.classList.toggle('active', key === tab);
-    });
+// ==========================================
+// 新闻
+// ==========================================
+async function loadNews() {
+    try {
+        const data = await fetchJson(API.news);
+        renderNews(data.articles || []);
+    } catch (e) {
+        el.newsScroll.innerHTML = `<span style="color:var(--text-muted);font-size:0.8rem;">新闻暂时无法加载</span>`;
+    }
+}
 
-    if (tab === 'games') loadGames();
-    else if (tab === 'standings') loadStandings();
+function renderNews(articles) {
+    if (!articles.length) {
+        el.newsScroll.innerHTML = `<span style="color:var(--text-muted);font-size:0.8rem;">暂无新闻</span>`;
+        return;
+    }
+
+    el.newsScroll.innerHTML = articles.slice(0, 12).map(a => {
+        const img = a.images?.[0]?.url || '';
+        const src = a.byline || 'ESPN';
+        return `
+        <a class="news-card" href="${a.links?.web?.href || '#'}" target="_blank" rel="noopener">
+            <div class="news-card-img" style="background:${img ? `url(${img}) center/cover` : 'linear-gradient(135deg,var(--bg-secondary),var(--bg-card))'};"></div>
+            <div class="news-card-body">
+                <div class="news-card-title">${a.headline || a.description || ''}</div>
+                <div class="news-card-meta">
+                    <span class="news-card-source">${src}</span>
+                    <span class="news-card-time">${timeAgo(a.published)}</span>
+                </div>
+            </div>
+        </a>`;
+    }).join('');
 }
 
 // ==========================================
 // 今日赛程
 // ==========================================
+function setupDateNav() {
+    state.currentDate = getUSDate();
+    updateDateDisplay();
+    el.prevDateBtn.addEventListener('click', () => {
+        state.currentDate.setDate(state.currentDate.getDate() - 1);
+        updateDateDisplay();
+        loadGames();
+    });
+    el.nextDateBtn.addEventListener('click', () => {
+        state.currentDate.setDate(state.currentDate.getDate() + 1);
+        updateDateDisplay();
+        loadGames();
+    });
+    el.todayBtn.addEventListener('click', () => {
+        state.currentDate = getUSDate();
+        updateDateDisplay();
+        loadGames();
+    });
+}
+
+function updateDateDisplay() {
+    el.displayDate.textContent = fmtDateDisplay(state.currentDate);
+    el.headerDate.textContent = fmtHeaderDate(state.currentDate);
+}
+
 async function loadGames() {
-    const dateKey = formatDateKey(state.currentDate);
+    const key = fmtDateKey(state.currentDate);
     el.gamesContainer.innerHTML = `<div class="loading-state"><div class="spinner"></div><p>正在加载赛程数据...</p></div>`;
 
     try {
-        const data = await fetchAPI('/games', {
-            'dates[]': dateKey,
-            per_page: 30,
+        const data = await fetchScoreboard(key);
+        const events = data.events || [];
+        renderGames(events);
+
+        // Extract standings data from games
+        events.forEach(e => {
+            const comp = e.competitions?.[0];
+            if (comp) {
+                comp.competitors?.forEach(c => {
+                    const abbr = c.team?.abbreviation;
+                    const rec = c.records?.find(r => r.type === 'total');
+                    if (abbr && rec) {
+                        const parts = rec.summary.split('-');
+                        const w = parseInt(parts[0]), l = parseInt(parts[1]);
+                        if (!isNaN(w) && !isNaN(l)) {
+                            state.standingsCache = state.standingsCache || {};
+                            state.standingsCache[abbr] = { w, l, pct: w / (w + l) };
+                        }
+                    }
+                });
+            }
         });
-        renderGames(data.data);
-    } catch (err) {
+
+        // Live indicator
+        const hasLive = events.some(e => e.competitions?.[0]?.status?.type?.state === 'in');
+        el.liveIndicator.classList.toggle('active', hasLive);
+        if (hasLive) startAutoRefresh();
+
+    } catch (e) {
         el.gamesContainer.innerHTML = `
             <div class="error-state">
-                <div class="error-icon">⚠️</div>
-                <p>加载赛程数据失败: ${err.message}</p>
-                <button class="retry-btn" onclick="loadGames()">重新加载</button>
+                <div class="error-icon">🏀</div>
+                <p>加载失败，请检查网络连接</p>
+                <p style="font-size:0.75rem;color:var(--text-muted);margin-top:6px;">${e.message}</p>
+                <button class="retry-btn" onclick="loadGames()" style="margin-top:12px;">重试</button>
             </div>`;
     }
 }
 
-function renderGames(games) {
-    if (!games || games.length === 0) {
+function renderGames(events) {
+    if (!events.length) {
         el.gamesContainer.innerHTML = `
             <div class="empty-state">
                 <div class="empty-icon">📅</div>
-                <p>该日期暂无比赛安排</p>
-                <p style="font-size:0.8rem;color:var(--text-muted);margin-top:8px;">NBA 休赛期或暂无赛程数据</p>
+                <p style="font-size:1.1rem;">该日暂无比赛</p>
+                <p style="font-size:0.8rem;color:var(--text-muted);margin-top:6px;">点击日期切换查看其他日期</p>
             </div>`;
         return;
     }
 
-    // Sort: live first, then by time
-    const sorted = [...games].sort((a, b) => {
-        const aLive = a.status === 'In Progress' ? 0 : 1;
-        const bLive = b.status === 'In Progress' ? 0 : 1;
-        if (aLive !== bLive) return aLive - bLive;
-        return a.id - b.id;
-    });
+    // Sort: live first, then completed, then scheduled
+    const order = e => {
+        const s = e.competitions?.[0]?.status?.type?.state;
+        if (s === 'in') return 0;
+        if (s === 'post') return 1;
+        return 2;
+    };
+    const sorted = [...events].sort((a, b) => order(a) - order(b));
 
-    const hasLive = sorted.some(g => g.status === 'In Progress');
-    el.liveBadge.style.display = hasLive ? 'inline' : 'none';
-
-    el.gamesContainer.innerHTML = sorted.map(game => renderGameCard(game)).join('');
-
-    // Auto-refresh if any game is live
-    if (hasLive) {
-        startAutoRefresh();
-    }
+    el.gamesContainer.innerHTML = sorted.map(e => renderGameCard(e)).join('');
 }
 
-function renderGameCard(game) {
-    const { home_team, visitor_team, home_team_score, visitor_team_score, status, period, time } = game;
-    const isLive = status === 'In Progress';
-    const isFinal = status === 'Final';
-    const isScheduled = status === 'Scheduled' || (!isLive && !isFinal);
+function renderGameCard(event) {
+    const comp = event.competitions?.[0] || {};
+    const status = comp.status?.type || {};
+    const isLive = status.state === 'in';
+    const isFinal = status.state === 'post';
+    const isPre = status.state === 'pre';
 
-    const hScore = home_team_score ?? '-';
-    const vScore = visitor_team_score ?? '-';
-    const hWin = isFinal && home_team_score > visitor_team_score;
-    const vWin = isFinal && visitor_team_score > home_team_score;
+    const competitors = comp.competitors || [];
+    const home = competitors.find(c => c.homeAway === 'home');
+    const away = competitors.find(c => c.homeAway === 'away');
+    if (!home || !away) return '';
 
-    let statusBadge = '';
-    let statusTime = '';
+    const hTeam = home.team || {};
+    const aTeam = away.team || {};
+    const hAbbr = hTeam.abbreviation || '';
+    const aAbbr = aTeam.abbreviation || '';
+    const hScore = home.score || '0';
+    const aScore = away.score || '0';
+    const hRec = home.records?.find(r => r.type === 'total')?.summary || '';
+    const aRec = away.records?.find(r => r.type === 'total')?.summary || '';
 
+    const hWin = isFinal && parseInt(hScore) > parseInt(aScore);
+    const aWin = isFinal && parseInt(aScore) > parseInt(hScore);
+
+    let badge = '',
+        detail = '';
     if (isFinal) {
-        statusBadge = `<span class="game-status-badge final">已结束</span>`;
+        badge = `<span class="game-status-badge final">已结束</span>`;
+        detail = comp.status.type.detail || 'Final';
     } else if (isLive) {
-        const qText = period > 4 ? `加时${period - 4}` : `第${period}节`;
-        statusBadge = `<span class="game-status-badge live">▶ ${qText}</span>`;
-        statusTime = time ? `<div class="game-status-time">${time}</div>` : '';
+        const per = comp.status.period || 1;
+        const q = per > 4 ? `加时${per - 4}` : `第${per}节`;
+        const clock = comp.status.displayClock || '';
+        badge = `<span class="game-status-badge live">▶ ${q}</span>`;
+        detail = clock ? `${clock}` : '';
     } else {
-        statusBadge = `<span class="game-status-badge scheduled">未开始</span>`;
-        statusTime = `<div class="game-status-time">${formatTimeUTC(game.date)} 开赛</div>`;
+        badge = `<span class="game-status-badge scheduled">未开始</span>`;
+        const d = new Date(event.date || comp.date);
+        if (!isNaN(d.getTime())) {
+            const h = String(d.getHours()).padStart(2, '0');
+            const m = String(d.getMinutes()).padStart(2, '0');
+            detail = `${h}:${m} 开赛`;
+        }
     }
 
     return `
     <div class="game-card${isLive ? ' live' : ''}">
         <div class="game-team visitor">
-            <div>
-                <div class="game-team-name">${getTeamName(visitor_team.id)}</div>
-                <span class="game-team-name-cn">${getTeamCn(visitor_team.id)}</span>
+            <div class="game-team-info">
+                <div class="game-team-name" style="color:${getColor(aAbbr)}">${getCn(aAbbr)}</div>
+                <div class="game-team-record">${aAbbr} ${aRec}</div>
             </div>
-            <img class="game-team-logo" src="${getTeamLogo(visitor_team.id)}" alt="${visitor_team.abbreviation}" loading="lazy" onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 40 40%22><rect fill=%22%231a2035%22 width=%2240%22 height=%2240%22 rx=%228%22/><text x=%2220%22 y=%2226%22 text-anchor=%22middle%22 font-size=%2216%22 fill=%22%2394a3b8%22>${visitor_team.abbreviation}</text></svg>'">
+            <img class="game-team-logo" src="${getLogo(aAbbr)}" alt="${aAbbr}" onerror="this.style.display='none'">
         </div>
         <div class="game-score-section">
-            <span class="game-score ${vWin ? 'winner' : ''}">${vScore}</span>
+            <span class="game-score ${aWin ? 'winner' : ''}">${isPre ? '-' : aScore}</span>
             <span class="game-score-divider">:</span>
-            <span class="game-score ${hWin ? 'winner' : ''}">${hScore}</span>
+            <span class="game-score ${hWin ? 'winner' : ''}">${isPre ? '-' : hScore}</span>
         </div>
         <div class="game-team home">
-            <img class="game-team-logo" src="${getTeamLogo(home_team.id)}" alt="${home_team.abbreviation}" loading="lazy" onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 40 40%22><rect fill=%22%231a2035%22 width=%2240%22 height=%2240%22 rx=%228%22/><text x=%2220%22 y=%2226%22 text-anchor=%22middle%22 font-size=%2216%22 fill=%22%2394a3b8%22>${home_team.abbreviation}</text></svg>'">
-            <div>
-                <div class="game-team-name">${getTeamName(home_team.id)}</div>
-                <span class="game-team-name-cn">${getTeamCn(home_team.id)}</span>
+            <img class="game-team-logo" src="${getLogo(hAbbr)}" alt="${hAbbr}" onerror="this.style.display='none'">
+            <div class="game-team-info">
+                <div class="game-team-name" style="color:${getColor(hAbbr)}">${getCn(hAbbr)}</div>
+                <div class="game-team-record">${hAbbr} ${hRec}</div>
             </div>
         </div>
         <div class="game-status">
-            ${statusBadge}
-            ${statusTime}
+            ${badge}
+            <div class="game-status-time">${detail}</div>
         </div>
     </div>`;
 }
@@ -284,187 +351,113 @@ function renderGameCard(game) {
 function startAutoRefresh() {
     if (state.refreshTimer) clearInterval(state.refreshTimer);
     state.refreshTimer = setInterval(() => {
-        const activeTab = $('.tab-btn.active');
-        if (activeTab && activeTab.dataset.tab === 'games') {
-            loadGames();
+        const active = $('.tab-btn.active');
+        if (active?.dataset.tab === 'games') loadGames();
+    }, 30000);
+}
+
+// ==========================================
+// 球员数据 (v3 Statistics API)
+// ==========================================
+const LB_CONFIG = {
+    pts: { label: '得分王', cat: 'pointsPerGame', abbrev: 'PTS' },
+    reb: { label: '篮板王', cat: 'reboundsPerGame', abbrev: 'REB' },
+    ast: { label: '助攻王', cat: 'assistsPerGame', abbrev: 'AST' },
+    stl: { label: '抢断王', cat: 'stealsPerGame', abbrev: 'STL' },
+    blk: { label: '盖帽王', cat: 'blocksPerGame', abbrev: 'BLK' },
+};
+
+// Stat category index mapping for v3 API response
+// offensive values: [PTS, FGM, FGA, FG%, 3PM, 3PA, 3P%, FTM, FTA, FT%, REB, AST, ...]
+// defensive values: [STL, BLK, ...]
+const STAT_IDX = {
+    pts: { cat: 'offensive', idx: 0 },
+    reb: { cat: 'offensive', idx: 10 },
+    ast: { cat: 'offensive', idx: 11 },
+    stl: { cat: 'defensive', idx: 0 },
+    blk: { cat: 'defensive', idx: 1 },
+};
+
+function setupLeaderboard() {
+    el.lbTabs.forEach(tab => {
+        tab.addEventListener('click', () => {
+            const cat = tab.dataset.cat;
+            el.lbTabs.forEach(t => t.classList.toggle('active', t.dataset.cat === cat));
+            state.selectedLB = cat;
+            loadLeaders(cat);
+        });
+    });
+}
+
+async function loadLeaders(category) {
+    const cfg = LB_CONFIG[category];
+    el.lbContainer.innerHTML = `<div class="loading-state"><div class="spinner"></div><p>加载${cfg.label}数据...</p></div>`;
+
+    try {
+        const url = `${API.stats}?page=1&limit=50`;
+        const data = await fetchJson(url);
+        const athletes = data.athletes || [];
+
+        if (!athletes.length) throw new Error('No athlete data');
+
+        // Extract stat values and sort
+        const statMap = STAT_IDX[category];
+        const entries = athletes.map(a => {
+            const catData = a.categories?.find(c => c.name === statMap.cat);
+            const val = catData?.values?.[statMap.idx];
+            const athlete = a.athlete || {};
+            const rawAbbr = athlete.teams?.[0]?.abbreviation || athlete.teamShortName || '';
+            return {
+                athlete: athlete,
+                value: typeof val === 'number' ? val : 0,
+                teamAbbr: resolveAbbr(rawAbbr),
+                displayValue: val != null ? val.toFixed(1) : '-',
+            };
+        }).filter(e => e.value > 0)
+          .sort((a, b) => b.value - a.value)
+          .slice(0, 10);
+
+        if (entries.length) {
+            renderLeaders(entries, cfg);
+        } else {
+            el.lbContainer.innerHTML = `<div class="empty-state"><p>暂无${cfg.label}数据</p></div>`;
         }
-    }, 30000); // refresh every 30s
-}
-
-function setupDateNav() {
-    state.currentDate = getChinaDate();
-    updateDateDisplay();
-
-    el.prevDateBtn.addEventListener('click', () => {
-        state.currentDate.setDate(state.currentDate.getDate() - 1);
-        updateDateDisplay();
-        loadGames();
-    });
-
-    el.nextDateBtn.addEventListener('click', () => {
-        state.currentDate.setDate(state.currentDate.getDate() + 1);
-        updateDateDisplay();
-        loadGames();
-    });
-
-    el.todayBtn.addEventListener('click', () => {
-        state.currentDate = getChinaDate();
-        updateDateDisplay();
-        loadGames();
-    });
-}
-
-function updateDateDisplay() {
-    el.displayDate.textContent = formatDisplayDate(state.currentDate);
-    el.headerDate.textContent = formatHeaderDate(state.currentDate);
-}
-
-// ==========================================
-// 球员数据
-// ==========================================
-function setupPlayerSearch() {
-    const doSearch = () => {
-        const query = el.playerSearch.value.trim();
-        if (query) searchPlayers(query);
-    };
-
-    el.searchBtn.addEventListener('click', doSearch);
-    el.playerSearch.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') doSearch();
-    });
-
-    // Hot tags
-    el.hotTags.forEach(tag => {
-        tag.addEventListener('click', () => {
-            const name = tag.dataset.player;
-            el.playerSearch.value = name;
-            searchPlayers(name);
-        });
-    });
-}
-
-async function searchPlayers(query) {
-    el.playerResults.innerHTML = `<div class="loading-state"><div class="spinner"></div><p>搜索中...</p></div>`;
-    el.playerStatsContainer.classList.remove('visible');
-    el.playerStatsContainer.innerHTML = '';
-
-    try {
-        const data = await fetchAPI('/players', { search: query, per_page: 24 });
-        renderPlayerResults(data.data);
-    } catch (err) {
-        el.playerResults.innerHTML = `
+    } catch (e) {
+        el.lbContainer.innerHTML = `
             <div class="error-state">
-                <p>搜索失败: ${err.message}</p>
-                <button class="retry-btn" onclick="searchPlayers('${query}')">重试</button>
+                <p>加载失败</p>
+                <p style="font-size:0.75rem;color:var(--text-muted);margin-top:6px;">${e.message}</p>
+                <button class="retry-btn" onclick="loadLeaders('${category}')">重试</button>
             </div>`;
     }
 }
 
-function renderPlayerResults(players) {
-    if (!players || players.length === 0) {
-        el.playerResults.innerHTML = `
-            <div class="empty-state">
-                <p>未找到相关球员，请尝试其他关键词</p>
-            </div>`;
-        return;
-    }
+function renderLeaders(entries, cfg) {
+    el.lbContainer.innerHTML = entries.map((entry, i) => {
+        const athlete = entry.athlete;
+        const name = athlete.displayName || 'Unknown';
+        const headshot = athlete.headshot?.href || '';
+        const abbr = entry.teamAbbr;
 
-    el.playerResults.innerHTML = players.map(p => {
-        const initials = `${p.first_name?.[0] || ''}${p.last_name?.[0] || ''}`;
-        const teamName = p.team ? p.team.full_name : '自由球员';
+        const rankClass = i === 0 ? 'gold' : i === 1 ? 'silver' : i === 2 ? 'bronze' : '';
+        const cardClass = i === 0 ? 'top-1' : i === 1 ? 'top-2' : i === 2 ? 'top-3' : '';
+
         return `
-        <div class="player-card ${state.selectedPlayerId === p.id ? 'selected' : ''}" data-player-id="${p.id}">
-            <div class="player-avatar">${initials}</div>
-            <div class="player-info">
-                <div class="player-name">${p.first_name} ${p.last_name}</div>
-                <div class="player-team">${teamName} · ${p.position || 'N/A'}</div>
+        <div class="leaderboard-card ${cardClass}">
+            <div class="lb-rank ${rankClass}">${i + 1}</div>
+            <div class="lb-avatar">
+                ${headshot ? `<img src="${headshot}" alt="${name}" onerror="this.style.display='none'">` : ''}
             </div>
-        </div>`;
-    }).join('');
-
-    // Click to load stats
-    $$('.player-card').forEach(card => {
-        card.addEventListener('click', () => {
-            const id = parseInt(card.dataset.playerId);
-            const player = players.find(p => p.id === id);
-            if (player) loadPlayerStats(player);
-        });
-    });
-}
-
-async function loadPlayerStats(player) {
-    state.selectedPlayerId = player.id;
-    $$('.player-card').forEach(c => c.classList.toggle('selected', parseInt(c.dataset.playerId) === player.id));
-
-    el.playerStatsContainer.innerHTML = `<div class="loading-state"><div class="spinner"></div><p>加载球员数据...</p></div>`;
-    el.playerStatsContainer.classList.add('visible');
-
-    try {
-        const data = await fetchAPI('/season_averages', {
-            season: API.season,
-            'player_ids[]': player.id,
-        });
-        renderPlayerStats(player, data.data?.[0]);
-    } catch (err) {
-        el.playerStatsContainer.innerHTML = `
-            <div class="error-state">
-                <p>加载数据失败: ${err.message}</p>
-            </div>`;
-    }
-}
-
-function renderPlayerStats(player, stats) {
-    if (!stats) {
-        el.playerStatsContainer.innerHTML = `
-            <div class="stats-header">
-                <div class="player-avatar">${player.first_name?.[0] || ''}${player.last_name?.[0] || ''}</div>
-                <h3>${player.first_name} ${player.last_name}</h3>
-                <span class="player-team-tag">${player.team?.full_name || '自由球员'}</span>
+            <div class="lb-info">
+                <div class="lb-name">${name}</div>
+                <div class="lb-team">${abbr ? `${getCn(abbr)} (${abbr})` : ''}</div>
             </div>
-            <div class="empty-state">
-                <p>暂无该球员本赛季数据</p>
-            </div>`;
-        return;
-    }
-
-    const teamName = player.team?.full_name || '自由球员';
-    const initials = `${player.first_name?.[0] || ''}${player.last_name?.[0] || ''}`;
-
-    const statFields = [
-        { label: '场次', key: 'games_played', fixed: 0 },
-        { label: '场均分钟', key: 'min', fixed: 1 },
-        { label: '得分', key: 'pts', fixed: 1 },
-        { label: '篮板', key: 'reb', fixed: 1 },
-        { label: '助攻', key: 'ast', fixed: 1 },
-        { label: '抢断', key: 'stl', fixed: 1 },
-        { label: '盖帽', key: 'blk', fixed: 1 },
-        { label: '投篮%', key: 'fg_pct', fixed: 1, suffix: '%', mult: 100 },
-        { label: '三分%', key: 'fg3_pct', fixed: 1, suffix: '%', mult: 100 },
-        { label: '罚球%', key: 'ft_pct', fixed: 1, suffix: '%', mult: 100 },
-        { label: '失误', key: 'turnover', fixed: 1 },
-        { label: '犯规', key: 'pf', fixed: 1 },
-    ];
-
-    const statsHtml = statFields.map(f => {
-        let val = stats[f.key] ?? '-';
-        if (val !== '-' && f.mult) val = (val * f.mult);
-        val = val !== '-' ? Number(val).toFixed(f.fixed) : '-';
-        return `
-        <div class="stat-item">
-            <div class="stat-value">${val}${f.suffix || ''}</div>
-            <div class="stat-label">${f.label}</div>
-        </div>`;
-    }).join('');
-
-    el.playerStatsContainer.innerHTML = `
-        <div class="stats-header">
-            <div class="player-avatar" style="width:50px;height:50px;font-size:1.2rem;">${initials}</div>
             <div>
-                <h3>${player.first_name} ${player.last_name}</h3>
-                <span style="font-size:0.85rem;color:var(--text-secondary);">${teamName} · ${player.position || 'N/A'} · #${stats.player_id}</span>
+                <div class="lb-value">${entry.displayValue}</div>
+                <div class="lb-label">${cfg.abbrev}</div>
             </div>
-        </div>
-        <div class="stats-grid">${statsHtml}</div>`;
+        </div>`;
+    }).join('');
 }
 
 // ==========================================
@@ -474,138 +467,118 @@ async function loadStandings() {
     el.standingsContainer.innerHTML = `<div class="loading-state"><div class="spinner"></div><p>正在加载排名数据...</p></div>`;
 
     try {
-        const data = await fetchStandingsFromAPI();
-        renderStandings(data);
-    } catch (err) {
+        // Fetch multiple days to get all team records
+        const daysToFetch = 5;
+        const fetches = [];
+        for (let i = 0; i < daysToFetch; i++) {
+            const d = getUSDate(-i);
+            fetches.push(fetchScoreboard(fmtDateKey(d)));
+        }
+
+        const results = await Promise.allSettled(fetches);
+        const teamsData = {};
+
+        results.forEach(result => {
+            if (result.status !== 'fulfilled') return;
+            const events = result.value.events || [];
+            events.forEach(e => {
+                const comp = e.competitions?.[0];
+                if (!comp) return;
+                comp.competitors?.forEach(c => {
+                    const abbr = c.team?.abbreviation;
+                    const rec = c.records?.find(r => r.type === 'total');
+                    if (abbr && rec) {
+                        const parts = rec.summary.split('-');
+                        const w = parseInt(parts[0]), l = parseInt(parts[1]);
+                        if (!isNaN(w) && !isNaN(l)) {
+                            teamsData[abbr] = { // overwrite to keep latest
+                                name: c.team.displayName || abbr,
+                                abbr,
+                                cn: getCn(abbr),
+                                w, l,
+                                pct: w / (w + l),
+                            };
+                        }
+                    }
+                });
+            });
+        });
+
+        const allTeams = Object.values(teamsData);
+        if (!allTeams.length) throw new Error('No team data');
+
+        // Sort by conference
+        const east = allTeams.filter(t => isEast(t.abbr)).sort((a, b) => b.pct - a.pct);
+        const west = allTeams.filter(t => !isEast(t.abbr)).sort((a, b) => b.pct - a.pct);
+
+        renderStandingsTable(east, west);
+    } catch (e) {
         el.standingsContainer.innerHTML = `
             <div class="error-state">
-                <div class="error-icon">⚠️</div>
-                <p>排名数据暂时无法获取</p>
-                <p style="font-size:0.8rem;color:var(--text-muted);margin-top:8px;">
-                    ${err.message} · 数据较多时可能需要一些时间
-                </p>
-                <button class="retry-btn" onclick="loadStandings()">重试</button>
+                <div class="error-icon">🏆</div>
+                <p>排名数据暂时不可用</p>
+                <p style="font-size:0.78rem;color:var(--text-muted);margin-top:6px;">${e.message}</p>
+                <button class="retry-btn" onclick="loadStandings()" style="margin-top:12px;">重试</button>
             </div>`;
     }
 }
 
-async function fetchStandingsFromAPI() {
-    // Try: fetch from balldontlie API and compute W/L from games
-    const teamsData = await fetchAPI('/teams');
-    const teams = teamsData.data;
-    const east = teams.filter(t => t.conference === 'East');
-    const west = teams.filter(t => t.conference === 'West');
-
-    // Fetch all completed games for the season to compute standings
-    let allGames = [];
-    let page = 1;
-    let totalPages = 1;
-
-    while (page <= totalPages && page <= 5) {  // limit to 5 pages
-        const data = await fetchAPI('/games', {
-            'seasons[]': API.season,
-            per_page: 100,
-            page: page,
-        });
-        allGames = allGames.concat(data.data.filter(g => g.status === 'Final'));
-        totalPages = data.meta?.total_pages || 1;
-        page++;
-    }
-
-    // Compute standings
-    const eastStandings = computeTeamRecords(allGames, east);
-    const westStandings = computeTeamRecords(allGames, west);
-
-    return { east: eastStandings, west: westStandings };
+function isEast(abbr) {
+    const east = ['BOS', 'NYK', 'PHI', 'BKN', 'TOR', 'MIL', 'CLE', 'IND', 'CHI',
+                  'DET', 'MIA', 'ATL', 'ORL', 'CHA', 'WAS'];
+    return east.includes(abbr);
 }
 
-function computeTeamRecords(games, teams) {
-    const records = {};
-    teams.forEach(t => {
-        records[t.id] = { team: t, wins: 0, losses: 0, games: {} };
-    });
-
-    games.forEach(g => {
-        const { home_team, visitor_team, home_team_score, visitor_team_score } = g;
-        if (home_team_score === null || visitor_team_score === null) return;
-
-        const homeId = home_team.id;
-        const visitorId = visitor_team.id;
-
-        if (!records[homeId] || !records[visitorId]) return;
-
-        if (home_team_score > visitor_team_score) {
-            records[homeId].wins++;
-            records[visitorId].losses++;
-        } else {
-            records[visitorId].wins++;
-            records[homeId].losses++;
-        }
-    });
-
-    const result = Object.values(records)
-        .filter(r => r.wins + r.losses > 0)
-        .map(r => ({
-            ...r,
-            pct: r.wins / (r.wins + r.losses),
-            streak: [],
-        }))
-        .sort((a, b) => b.pct - a.pct);
-
-    return result;
-}
-
-function renderStandings(data) {
-    const { east, west } = data;
-
+function renderStandingsTable(east, west) {
     el.standingsContainer.innerHTML = `
-        <div class="conference">
-            <div class="conference-header east">🏀 东部联盟</div>
-            ${renderStandingsTable(east, 'east')}
+        <div class="conf-card">
+            <div class="conf-header east">🏀 东部联盟</div>
+            ${buildTable(east)}
         </div>
-        <div class="conference">
-            <div class="conference-header west">🏀 西部联盟</div>
-            ${renderStandingsTable(west, 'west')}
+        <div class="conf-card">
+            <div class="conf-header west">🏀 西部联盟</div>
+            ${buildTable(west)}
         </div>`;
 }
 
-function renderStandingsTable(teams, conf) {
-    if (!teams || teams.length === 0) {
-        return `<div style="padding:40px;text-align:center;color:var(--text-muted);font-size:0.85rem;">
-            暂无数据（需通过 Cloudflare 部署获取完整排名）</div>`;
+function buildTable(teams) {
+    if (!teams?.length) {
+        return `<div style="padding:30px;text-align:center;color:var(--text-muted);font-size:0.85rem;">
+            暂无数据（NBA 休赛期）</div>`;
     }
-
-    const rows = teams.map((t, i) => {
-        const pct = t.pct ? (t.pct * 100).toFixed(1) : '0.0';
-        return `
-        <tr>
-            <td class="rank">${i + 1}</td>
-            <td>
-                <div class="team-cell">
-                    <img class="team-logo" src="${getTeamLogo(t.team.id)}" alt="${t.team.abbreviation}" loading="lazy"
-                         onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22><rect fill=%22%231a2035%22 width=%2224%22 height=%2224%22 rx=%224%22/><text x=%2212%22 y=%2216%22 text-anchor=%22middle%22 font-size=%2210%22 fill=%22%2394a3b8%22>${t.team.abbreviation}</text></svg>'">
-                    <span class="team-name">${getTeamCn(t.team.id)}</span>
-                </div>
-            </td>
-            <td>${t.wins}</td>
-            <td>${t.losses}</td>
-            <td class="win-pct">${pct}%</td>
-        </tr>`;
-    }).join('');
 
     return `
     <table class="standings-table">
         <thead>
-            <tr>
-                <th>排名</th>
-                <th>球队</th>
-                <th>胜</th>
-                <th>负</th>
-                <th>胜率</th>
-            </tr>
+            <tr><th>#</th><th>球队</th><th>胜</th><th>负</th><th>胜率</th><th>场差</th></tr>
         </thead>
-        <tbody>${rows}</tbody>
+        <tbody>
+            ${teams.map((t, i) => {
+                const gb = i === 0 ? '-' : calcGB(teams, t, i);
+                return `
+                <tr>
+                    <td class="rank-cell"><span class="playoff-indicator ${i < 8 ? 'confirmed' : 'eliminated'}"></span>${i + 1}</td>
+                    <td>
+                        <div class="team-cell">
+                            <img class="team-logo-sm" src="${getLogoSm(t.abbr)}" alt="${t.abbr}" onerror="this.style.display='none'">
+                            <span class="team-name" style="color:${getColor(t.abbr)}">${t.cn}</span>
+                        </div>
+                    </td>
+                    <td>${t.w}</td>
+                    <td>${t.l}</td>
+                    <td class="pct-cell">${(t.pct * 100).toFixed(1)}%</td>
+                    <td style="color:var(--text-muted);font-size:0.75rem;">${gb}</td>
+                </tr>`;
+            }).join('')}
+        </tbody>
     </table>`;
+}
+
+function calcGB(teams, t, i) {
+    if (i === 0) return '-';
+    const first = teams[0];
+    const diff = (first.w - first.l) - (t.w - t.l);
+    return (diff / 2).toFixed(1);
 }
 
 // ==========================================
@@ -615,22 +588,16 @@ async function init() {
     cacheDOM();
     setupTabs();
     setupDateNav();
-    setupPlayerSearch();
+    setupLeaderboard();
 
-    // Load teams first
-    await loadTeams();
-
-    // Load default tab
-    const savedTab = $('.tab-btn.active')?.dataset.tab || 'games';
-    switchTab(savedTab);
-
-    // Keyboard shortcut: Cmd/Ctrl + K for search focus
-    document.addEventListener('keydown', (e) => {
-        if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
-            e.preventDefault();
-            el.playerSearch.focus();
-        }
-    });
+    // Load initial data
+    const activeTab = $('.tab-btn.active')?.dataset.tab || 'games';
+    await Promise.all([
+        loadNews(),
+        activeTab === 'games' ? loadGames() :
+        activeTab === 'players' ? loadLeaders(state.selectedLB) :
+        loadStandings(),
+    ]);
 }
 
 document.addEventListener('DOMContentLoaded', init);
