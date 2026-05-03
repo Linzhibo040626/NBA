@@ -1,5 +1,3 @@
 # Cloudflare Pages 重定向规则
-# SPA 回退: 所有路由返回 index.html
-/*    /index.html   200
-
-# API 代理路由由 functions/api/proxy.js 处理
+# API 路由由 Pages Functions 自动处理
+# 无需额外重定向规则
