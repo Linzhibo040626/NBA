@@ -5,7 +5,6 @@
 // ===== 配置 =====
 const API = {
     base: 'https://balldontlie.io/api/v1',
-    proxy: '/api/proxy',  // Cloudflare Pages Function
     season: 2025,  // 2025-26 season
 };
 
@@ -143,13 +142,6 @@ async function fetchAPI(endpoint, params = {}) {
     if (!res.ok) {
         throw new Error(`API error: ${res.status} ${res.statusText}`);
     }
-    return res.json();
-}
-
-async function fetchProxy(url) {
-    const proxyUrl = `${API.proxy}?url=${encodeURIComponent(url)}`;
-    const res = await fetch(proxyUrl);
-    if (!res.ok) throw new Error(`Proxy error: ${res.status}`);
     return res.json();
 }
 
@@ -482,26 +474,18 @@ async function loadStandings() {
     el.standingsContainer.innerHTML = `<div class="loading-state"><div class="spinner"></div><p>正在加载排名数据...</p></div>`;
 
     try {
-        // Try to get standings from proxy first (nba.com data)
         const data = await fetchStandingsFromAPI();
         renderStandings(data);
     } catch (err) {
-        console.warn('Standings fetch error:', err);
-        // Fallback: compute from game data
-        try {
-            const computed = await computeStandingsFromGames();
-            renderStandings(computed);
-        } catch (err2) {
-            el.standingsContainer.innerHTML = `
-                <div class="error-state">
-                    <div class="error-icon">⚠️</div>
-                    <p>排名数据暂时无法获取</p>
-                    <p style="font-size:0.8rem;color:var(--text-muted);margin-top:8px;">
-                        ${err2.message} · 部署到 Cloudflare 后可正常显示
-                    </p>
-                    <button class="retry-btn" onclick="loadStandings()">重试</button>
-                </div>`;
-        }
+        el.standingsContainer.innerHTML = `
+            <div class="error-state">
+                <div class="error-icon">⚠️</div>
+                <p>排名数据暂时无法获取</p>
+                <p style="font-size:0.8rem;color:var(--text-muted);margin-top:8px;">
+                    ${err.message} · 数据较多时可能需要一些时间
+                </p>
+                <button class="retry-btn" onclick="loadStandings()">重试</button>
+            </div>`;
     }
 }
 
@@ -569,10 +553,6 @@ function computeTeamRecords(games, teams) {
         .sort((a, b) => b.pct - a.pct);
 
     return result;
-}
-
-async function computeStandingsFromGames() {
-    return fetchStandingsFromAPI();
 }
 
 function renderStandings(data) {

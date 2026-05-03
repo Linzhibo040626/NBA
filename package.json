@@ -1,7 +1,0 @@
-{
-  "name": "nba-live-dashboard",
-  "version": "1.0.0",
-  "description": "NBA 实时数据 - 赛程·球员·排名",
-  "private": true,
-  "main": "index.html"
-}
