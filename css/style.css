@@ -1,0 +1,863 @@
+/* ==========================================
+   NBA 实时数据 - 主样式表
+   ========================================== */
+
+/* === CSS 变量 === */
+:root {
+    --bg-primary: #0b0f1a;
+    --bg-secondary: #111827;
+    --bg-card: #1a2035;
+    --bg-card-hover: #1f2740;
+    --text-primary: #f1f5f9;
+    --text-secondary: #94a3b8;
+    --text-muted: #64748b;
+    --accent-red: #ef4444;
+    --accent-gold: #fbbf24;
+    --accent-blue: #3b82f6;
+    --accent-green: #22c55e;
+    --border-color: rgba(255, 255, 255, 0.08);
+    --border-hover: rgba(255, 255, 255, 0.15);
+    --shadow: 0 4px 24px rgba(0, 0, 0, 0.3);
+    --radius: 12px;
+    --radius-sm: 8px;
+    --radius-lg: 16px;
+    --transition: all 0.25s ease;
+}
+
+/* === 基础重置 === */
+*, *::before, *::after {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+html {
+    font-size: 16px;
+    scroll-behavior: smooth;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+                 "Hiragino Sans GB", "Microsoft YaHei", "Helvetica Neue", Arial, sans-serif;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    min-height: 100vh;
+    line-height: 1.6;
+}
+
+a {
+    color: var(--accent-blue);
+    text-decoration: none;
+}
+
+a:hover {
+    text-decoration: underline;
+}
+
+/* === 滚动条 === */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.25); }
+
+/* === 头部 === */
+header {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: linear-gradient(135deg, #0f1629 0%, #1a1f3a 100%);
+    border-bottom: 1px solid var(--border-color);
+    backdrop-filter: blur(20px);
+}
+
+.header-inner {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 14px 24px;
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+.logo {
+    font-size: 1.4rem;
+    font-weight: 700;
+    letter-spacing: 1px;
+}
+
+.logo span {
+    font-weight: 300;
+    color: var(--text-secondary);
+    font-size: 1.1rem;
+}
+
+.header-right {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
+.live-badge {
+    font-size: 0.75rem;
+    color: var(--accent-green);
+    background: rgba(34, 197, 94, 0.1);
+    padding: 3px 10px;
+    border-radius: 20px;
+    border: 1px solid rgba(34, 197, 94, 0.2);
+}
+
+.header-date {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
+/* === 导航标签 === */
+.tab-nav {
+    display: flex;
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 24px;
+    gap: 4px;
+}
+
+.tab-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 20px;
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: var(--transition);
+    border-bottom: 2px solid transparent;
+    position: relative;
+    font-family: inherit;
+}
+
+.tab-btn:hover {
+    color: var(--text-primary);
+    background: rgba(255,255,255,0.03);
+}
+
+.tab-btn.active {
+    color: var(--accent-gold);
+    border-bottom-color: var(--accent-gold);
+}
+
+.tab-icon { font-size: 1.1rem; }
+
+/* === 主内容区 === */
+main {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 24px;
+    min-height: calc(100vh - 180px);
+}
+
+.tab-content {
+    display: none;
+    animation: fadeIn 0.3s ease;
+}
+
+.tab-content.active {
+    display: block;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* === 日期导航 === */
+.date-nav {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    margin-bottom: 24px;
+    flex-wrap: wrap;
+}
+
+.date-nav-btn {
+    padding: 8px 18px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    color: var(--text-primary);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    font-size: 0.85rem;
+    transition: var(--transition);
+    font-family: inherit;
+}
+
+.date-nav-btn:hover {
+    background: var(--bg-card-hover);
+    border-color: var(--border-hover);
+}
+
+.today-btn {
+    background: var(--accent-red) !important;
+    border-color: var(--accent-red) !important;
+    color: white !important;
+    font-weight: 600;
+}
+
+.today-btn:hover {
+    opacity: 0.9;
+}
+
+.date-display {
+    font-size: 1.05rem;
+    font-weight: 600;
+    min-width: 160px;
+    text-align: center;
+    color: var(--text-primary);
+}
+
+/* === 加载状态 === */
+.loading-state {
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--text-secondary);
+}
+
+.loading-state p {
+    margin-top: 16px;
+}
+
+.spinner {
+    width: 32px;
+    height: 32px;
+    border: 3px solid var(--border-color);
+    border-top-color: var(--accent-red);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    margin: 0 auto;
+}
+
+.spinner.large {
+    width: 48px;
+    height: 48px;
+    border-width: 4px;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+/* === 错误状态 === */
+.error-state {
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--text-secondary);
+}
+
+.error-state .error-icon {
+    font-size: 3rem;
+    margin-bottom: 12px;
+}
+
+.error-state p {
+    margin-bottom: 16px;
+}
+
+.retry-btn {
+    padding: 10px 24px;
+    background: var(--accent-red);
+    border: none;
+    color: white;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    font-size: 0.9rem;
+    transition: var(--transition);
+    font-family: inherit;
+}
+
+.retry-btn:hover {
+    opacity: 0.9;
+}
+
+/* === 空状态 === */
+.empty-state {
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--text-secondary);
+}
+
+.empty-state .empty-icon {
+    font-size: 3rem;
+    margin-bottom: 12px;
+}
+
+/* === 赛程卡片网格 === */
+.games-container {
+    display: grid;
+    gap: 12px;
+}
+
+.game-card {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius);
+    padding: 20px 24px;
+    transition: var(--transition);
+}
+
+.game-card:hover {
+    background: var(--bg-card-hover);
+    border-color: var(--border-hover);
+}
+
+.game-card.live {
+    border-color: var(--accent-red);
+    box-shadow: 0 0 20px rgba(239, 68, 68, 0.1);
+}
+
+.game-team {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex: 1;
+}
+
+.game-team.visitor {
+    justify-content: flex-end;
+    text-align: right;
+}
+
+.game-team-logo {
+    width: 40px;
+    height: 40px;
+    object-fit: contain;
+    flex-shrink: 0;
+}
+
+.game-team-name {
+    font-size: 0.95rem;
+    font-weight: 600;
+}
+
+.game-team-name-cn {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    display: block;
+}
+
+.game-score-section {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    padding: 0 20px;
+}
+
+.game-score {
+    font-size: 1.6rem;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    min-width: 36px;
+    text-align: center;
+}
+
+.game-score.winner {
+    color: var(--accent-gold);
+}
+
+.game-score-divider {
+    color: var(--text-muted);
+    font-size: 1rem;
+}
+
+.game-status {
+    text-align: center;
+    min-width: 70px;
+}
+
+.game-status-badge {
+    display: inline-block;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.game-status-badge.final {
+    background: rgba(100, 116, 139, 0.2);
+    color: var(--text-muted);
+}
+
+.game-status-badge.live {
+    background: rgba(239, 68, 68, 0.15);
+    color: var(--accent-red);
+    animation: pulse 2s ease-in-out infinite;
+}
+
+.game-status-badge.scheduled {
+    background: rgba(59, 130, 246, 0.1);
+    color: var(--accent-blue);
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
+}
+
+.game-status-time {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    margin-top: 4px;
+}
+
+/* === 搜索部分（球员） === */
+.search-section {
+    margin-bottom: 24px;
+}
+
+.search-box {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+.search-box input {
+    flex: 1;
+    padding: 12px 16px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
+    font-size: 0.95rem;
+    outline: none;
+    transition: var(--transition);
+    font-family: inherit;
+}
+
+.search-box input:focus {
+    border-color: var(--accent-blue);
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.search-box input::placeholder {
+    color: var(--text-muted);
+}
+
+.search-btn {
+    padding: 12px 28px;
+    background: var(--accent-blue);
+    border: none;
+    border-radius: var(--radius-sm);
+    color: white;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: var(--transition);
+    font-family: inherit;
+}
+
+.search-btn:hover {
+    opacity: 0.9;
+}
+
+.search-hints {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+
+.hot-tag {
+    padding: 4px 12px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 20px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: var(--transition);
+    font-size: 0.8rem;
+    font-family: inherit;
+}
+
+.hot-tag:hover {
+    background: var(--bg-card-hover);
+    color: var(--text-primary);
+    border-color: var(--accent-blue);
+}
+
+/* === 球员搜索结果 === */
+.player-results {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 10px;
+    margin-bottom: 24px;
+}
+
+.player-card {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 16px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: var(--transition);
+}
+
+.player-card:hover {
+    background: var(--bg-card-hover);
+    border-color: var(--border-hover);
+    transform: translateY(-1px);
+}
+
+.player-card.selected {
+    border-color: var(--accent-blue);
+    background: rgba(59, 130, 246, 0.08);
+}
+
+.player-avatar {
+    width: 42px;
+    height: 42px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--accent-blue), var(--accent-red));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1rem;
+    font-weight: 700;
+    color: white;
+    flex-shrink: 0;
+}
+
+.player-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.player-name {
+    font-weight: 600;
+    font-size: 0.9rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.player-team {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+}
+
+/* === 球员数据详情 === */
+.player-stats-container {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    padding: 24px;
+    display: none;
+}
+
+.player-stats-container.visible {
+    display: block;
+}
+
+.stats-header {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 20px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.stats-header h3 {
+    font-size: 1.2rem;
+}
+
+.stats-header .player-team-tag {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    background: rgba(255,255,255,0.05);
+    padding: 3px 10px;
+    border-radius: 20px;
+}
+
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+    gap: 10px;
+}
+
+.stat-item {
+    text-align: center;
+    padding: 12px 8px;
+    background: rgba(255,255,255,0.03);
+    border-radius: var(--radius-sm);
+}
+
+.stat-value {
+    font-size: 1.3rem;
+    font-weight: 700;
+    color: var(--accent-gold);
+}
+
+.stat-label {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    margin-top: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+/* === 球队排名 === */
+.standings-header {
+    text-align: center;
+    margin-bottom: 28px;
+}
+
+.standings-header h2 {
+    font-size: 1.3rem;
+    font-weight: 700;
+}
+
+.standings-subtitle {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    margin-top: 6px;
+}
+
+.standings-container {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+}
+
+.conference {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+}
+
+.conference-header {
+    padding: 16px 20px;
+    font-size: 1rem;
+    font-weight: 700;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.conference-header.east {
+    color: var(--accent-red);
+}
+
+.conference-header.west {
+    color: var(--accent-blue);
+}
+
+.standings-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.standings-table th,
+.standings-table td {
+    padding: 10px 14px;
+    text-align: left;
+    font-size: 0.8rem;
+}
+
+.standings-table th {
+    font-weight: 600;
+    color: var(--text-muted);
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border-bottom: 1px solid var(--border-color);
+    position: sticky;
+    top: 0;
+    background: var(--bg-card);
+}
+
+.standings-table td {
+    border-bottom: 1px solid rgba(255,255,255,0.03);
+}
+
+.standings-table tr:hover td {
+    background: rgba(255,255,255,0.03);
+}
+
+.standings-table .rank {
+    font-weight: 700;
+    color: var(--text-muted);
+    width: 30px;
+}
+
+.standings-table .team-cell {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.standings-table .team-logo {
+    width: 24px;
+    height: 24px;
+    object-fit: contain;
+}
+
+.standings-table .team-name {
+    font-weight: 600;
+}
+
+.standings-table .win-pct {
+    font-weight: 600;
+}
+
+.standings-table .streak {
+    font-size: 0.75rem;
+}
+
+.standings-table .streak.win { color: var(--accent-green); }
+.standings-table .streak.loss { color: var(--accent-red); }
+
+/* === 页脚 === */
+footer {
+    border-top: 1px solid var(--border-color);
+    background: var(--bg-secondary);
+    margin-top: 40px;
+}
+
+.footer-inner {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px 24px;
+    text-align: center;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+
+.footer-version {
+    margin-top: 4px;
+    font-size: 0.7rem;
+}
+
+/* === 加载遮罩 === */
+.loading-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(11, 15, 26, 0.8);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+    backdrop-filter: blur(4px);
+}
+
+.loading-overlay.hidden {
+    display: none;
+}
+
+.loading-overlay p {
+    margin-top: 16px;
+    color: var(--text-secondary);
+}
+
+/* === 响应式 === */
+@media (max-width: 768px) {
+    .header-inner {
+        padding: 12px 16px;
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    .tab-nav {
+        padding: 0 16px;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .tab-btn {
+        padding: 10px 14px;
+        font-size: 0.8rem;
+        white-space: nowrap;
+    }
+
+    .tab-label {
+        display: none;
+    }
+
+    main {
+        padding: 16px;
+    }
+
+    .game-card {
+        padding: 14px 16px;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+
+    .game-team {
+        flex: 0 0 auto;
+    }
+
+    .game-team-logo {
+        width: 32px;
+        height: 32px;
+    }
+
+    .game-score-section {
+        padding: 0 10px;
+        gap: 10px;
+    }
+
+    .game-score {
+        font-size: 1.2rem;
+        min-width: 28px;
+    }
+
+    .date-nav-btn {
+        padding: 6px 12px;
+        font-size: 0.8rem;
+    }
+
+    .standings-container {
+        grid-template-columns: 1fr;
+    }
+
+    .stats-grid {
+        grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+    }
+
+    .player-results {
+        grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    }
+
+    .search-hints {
+        display: none;
+    }
+}
+
+@media (max-width: 480px) {
+    .game-team-name, .game-team-name-cn {
+        display: none;
+    }
+
+    .logo {
+        font-size: 1.1rem;
+    }
+
+    .game-team-logo {
+        width: 28px;
+        height: 28px;
+    }
+
+    .standings-table th,
+    .standings-table td {
+        padding: 8px 8px;
+        font-size: 0.7rem;
+    }
+}
